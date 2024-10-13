@@ -12,6 +12,8 @@ import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { OrderPaginationDTO } from './dto/order-pagination.dto';
 import { NATS_SERVICE } from 'src/config';
 import { firstValueFrom } from 'rxjs';
+import { OrderWithProducts } from 'src/interfaces/order-with-products.interface';
+import { PaymentsOrderDto } from './dto';
 
 @Injectable()
 export class OrdersService extends PrismaClient implements OnModuleInit {
@@ -159,5 +161,46 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
 
   remove(id: number) {
     return `This action removes a #${id} order`;
+  }
+
+  async createPaymentSession(order: OrderWithProducts) {
+    try {
+      const paymentSession = await firstValueFrom(
+        this.client.send('create.payment.session', {
+          orderId: order.id,
+          currency: 'usd',
+          items: order.OrderItem.map((item) => ({
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+          })),
+        }),
+      );
+      return paymentSession;
+    } catch (error) {
+      throw new RpcException(error);
+    }
+  }
+  async paidOrder(paidOrderDto: PaymentsOrderDto) {
+    console.log(paidOrderDto);
+
+    const updateOrder = await this.order.update({
+      where: { id: paidOrderDto.orderId },
+      data: {
+        status: 'PAID',
+        paid: true,
+        paidAt: new Date(),
+        stripeChargeId: paidOrderDto.stripePaymentId,
+
+        OrderReceipt: {
+          create: {
+            receiptUrl: paidOrderDto.recipeUrl,
+          },
+        },
+      },
+    });
+    console.log(updateOrder);
+
+    return { updateOrder };
   }
 }

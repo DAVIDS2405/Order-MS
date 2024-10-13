@@ -1,23 +1,24 @@
-import {
-  Controller,
-  NotImplementedException,
-  ParseUUIDPipe,
-} from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { Controller, ParseUUIDPipe } from '@nestjs/common';
+import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import { OrdersService } from './orders.service';
 import {
   ChangeOrderStatusDto,
   CreateOrderDto,
   OrderPaginationDTO,
+  PaymentsOrderDto,
 } from './dto';
-
 @Controller()
 export class OrdersController {
   constructor(private readonly client: OrdersService) {}
 
   @MessagePattern('createOrder')
-  create(@Payload() createOrderDto: CreateOrderDto) {
-    return this.client.create(createOrderDto);
+  async create(@Payload() createOrderDto: CreateOrderDto) {
+    const order = await this.client.create(createOrderDto);
+    const paymentSession = await this.client.createPaymentSession(order);
+    return {
+      order,
+      paymentSession,
+    };
   }
 
   @MessagePattern('findAllOrders')
@@ -33,5 +34,9 @@ export class OrdersController {
   @MessagePattern('changeOrderStatus')
   changeOrderStatus(@Payload() changeOrderStatus: ChangeOrderStatusDto) {
     return this.client.changeStatus(changeOrderStatus);
+  }
+  @EventPattern('payment.succeeded')
+  paidOrder(@Payload() paidOrderDto: PaymentsOrderDto) {
+    return this.client.paidOrder(paidOrderDto);
   }
 }
